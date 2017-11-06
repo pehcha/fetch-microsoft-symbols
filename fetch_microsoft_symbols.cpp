@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -40,12 +41,13 @@ size_t save_bytes_to_vector(char* ptr, size_t size, size_t nmemb,
 }
 
 int main(int argc, char** argv) {
-  if (argc != 3) {
-    fprintf(stderr, "Usage: fetch_microsoft_symbols <debug file> <debug id>\n");
+  if (argc != 4) {
+    fprintf(stderr, "Usage: fetch_microsoft_symbols <debug file> <debug id> <output_file>\n");
     return 1;
   }
   const char* debug_file = argv[1];
   const char* debug_id = argv[2];
+  const char* output_file = argv[3];
 
   CURL* curl = curl_easy_init();
 
@@ -78,15 +80,25 @@ int main(int argc, char** argv) {
 
   // Sanity check that this is a cabinet file
   if (compressed_bytes.size() < 4 ||
-      memcmp(&compressed_bytes[0], kCABHeader, 4) != 0) {
+    memcmp(&compressed_bytes[0], kCABHeader, 4) != 0)
+  {
     fprintf(stderr, "Not a cabinet file!\n");
-    return 1;
+    return 2;
   }
 
   vector<uint8_t> pdb_bytes;
   if (!extract_cab(compressed_bytes, pdb_bytes)) {
     fprintf(stderr, "Failed to decompress PDB\n");
-    return 1;
+    return 3;
+  }
+
+  std::ofstream outfile(output_file, std::ios::out | std::ios::binary);
+
+  try {
+    outfile.write(reinterpret_cast<char*>(&pdb_bytes[0]), pdb_bytes.size());
+  } catch (...) {
+    fprintf(stderr, "Couldn't write to %s\n", output_file);
+    return 4;
   }
 
   //TODO: dump symbols from PDB
